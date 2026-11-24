@@ -1,0 +1,35 @@
+@startuml
+title Event Stream Analyzer - Design Patterns
+skinparam classAttributeIconSize 0
+
+class App
+class ParsedLine
+class KeyValueParser
+interface RecordClassifier
+class ClassifierChain <<Chain of Responsibility>>
+class ClassifierChainFactory <<Factory>>
+interface Aggregator
+class SensorAggregator
+class DeviceAggregator
+class AccessAggregator
+class AggregatorFactory <<Factory>>
+interface OutputWriter <<Strategy>>
+class JsonOutputWriter
+class JsonWriter
+
+App --> KeyValueParser
+App --> RecordClassifier
+App --> AggregatorFactory
+App --> OutputWriter
+KeyValueParser --> ParsedLine
+ClassifierChain ..|> RecordClassifier
+ClassifierChainFactory ..> ClassifierChain : creates
+ClassifierChain --> RecordClassifier : delegates
+SensorAggregator ..|> Aggregator
+DeviceAggregator ..|> Aggregator
+AccessAggregator ..|> Aggregator
+AggregatorFactory ..> Aggregator : creates
+JsonOutputWriter ..|> OutputWriter
+JsonOutputWriter --> JsonWriter
+App --> Aggregator : accepts records
+@enduml
