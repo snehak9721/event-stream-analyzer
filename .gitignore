@@ -1,7 +1,6 @@
 target/
 results/
 empty-results*/
-.DS_Store
 events.txt
 empty.txt
-
+.DS_Store

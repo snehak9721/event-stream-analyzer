@@ -1,35 +1,106 @@
 @startuml
-title Event Stream Analyzer - Design Patterns
 skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+title Event Stream Analyzer - Class Diagram
 
-class App
-class ParsedLine
-class KeyValueParser
-interface RecordClassifier
-class ClassifierChain <<Chain of Responsibility>>
-class ClassifierChainFactory <<Factory>>
-interface Aggregator
-class SensorAggregator
-class DeviceAggregator
-class AccessAggregator
-class AggregatorFactory <<Factory>>
-interface OutputWriter <<Strategy>>
-class JsonOutputWriter
-class JsonWriter
+class App {
+  +main(args: String[])
+  ~analyze(file: Path, outDir: Path)
+}
 
-App --> KeyValueParser
-App --> RecordClassifier
-App --> AggregatorFactory
-App --> OutputWriter
-KeyValueParser --> ParsedLine
+package "Parsing" {
+  class KeyValueParser { +parse(line: String): ParsedLine }
+  class ParsedLine {
+    -fields: Map<String, String>
+    +get(key: String): String
+    +has(key: String): boolean
+  }
+}
+
+package "Classification (Chain of Responsibility)" {
+  enum RecordType { SENSOR; DEVICE; ACCESS }
+  interface RecordClassifier { +classify(line: ParsedLine): RecordType }
+  class ClassifierChain {
+    -classifiers: List<RecordClassifier>
+    +classify(line: ParsedLine): RecordType
+  }
+  class ClassifierChainFactory { +createDefault(): RecordClassifier }
+  class SensorClassifier
+  class DeviceClassifier
+  class AccessClassifier
+  class Validation {
+    {static} ~isFiniteNumber(value: String): boolean
+    {static} ~isNonNegativeInteger(value: String): boolean
+  }
+}
+
+package "Aggregation (Factory + Aggregators)" {
+  class AggregatorFactory { +create(type: RecordType): Aggregator }
+  interface Aggregator {
+    +accept(line: ParsedLine): void
+    +result(): Map<String, Object>
+  }
+  class SensorAggregator
+  class DeviceAggregator
+  class AccessAggregator
+}
+
+package "Output (Strategy)" {
+  interface OutputWriter {
+    +write(outDir: Path, sensors: Map<String, Object>, devices: Map<String, Object>, access: Map<String, Object>): void
+  }
+  class JsonOutputWriter
+  class JsonWriter { {static} +pretty(value: Object): String }
+}
+
+App ..> KeyValueParser : uses
+App ..> ClassifierChainFactory : uses
+App ..> AggregatorFactory : uses
+App ..> OutputWriter : uses
+KeyValueParser ..> ParsedLine : creates
+
+ClassifierChainFactory ..> ClassifierChain : <<create>>
+ClassifierChainFactory ..> SensorClassifier : <<create>>
+ClassifierChainFactory ..> DeviceClassifier : <<create>>
+ClassifierChainFactory ..> AccessClassifier : <<create>>
+ClassifierChain o--> "*" RecordClassifier : classifiers
 ClassifierChain ..|> RecordClassifier
-ClassifierChainFactory ..> ClassifierChain : creates
-ClassifierChain --> RecordClassifier : delegates
+SensorClassifier ..|> RecordClassifier
+DeviceClassifier ..|> RecordClassifier
+AccessClassifier ..|> RecordClassifier
+SensorClassifier ..> Validation
+AccessClassifier ..> Validation
+RecordClassifier ..> ParsedLine
+RecordClassifier ..> RecordType
+
+AggregatorFactory ..> Aggregator : <<create>>
+AggregatorFactory ..> SensorAggregator : <<create>>
+AggregatorFactory ..> DeviceAggregator : <<create>>
+AggregatorFactory ..> AccessAggregator : <<create>>
 SensorAggregator ..|> Aggregator
 DeviceAggregator ..|> Aggregator
 AccessAggregator ..|> Aggregator
-AggregatorFactory ..> Aggregator : creates
+Aggregator ..> ParsedLine
+
 JsonOutputWriter ..|> OutputWriter
-JsonOutputWriter --> JsonWriter
-App --> Aggregator : accepts records
+JsonOutputWriter ..> JsonWriter
+
+note right of ClassifierChain
+  **Chain of Responsibility**
+  Classifiers are tried in registration order;
+  the first non-null RecordType wins.
+end note
+note right of ClassifierChainFactory
+  **Simple Factory**
+  Builds the ordered classifier list.
+end note
+note right of AggregatorFactory
+  **Simple Factory**
+  Creates the aggregator for each RecordType.
+end note
+note right of OutputWriter
+  **Strategy**
+  OutputWriter abstracts the output format.
+  A CsvOutputWriter can be added later.
+end note
 @enduml

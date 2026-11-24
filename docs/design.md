@@ -8,22 +8,38 @@ The application reads one event record per line from a plain-text IoT or smart-b
 
 ### Chain of Responsibility
 
-`ClassifierChain` holds independent classifiers for sensors, devices, and access records. Each classifier either recognizes the line or passes it on. This fits because classification is an ordered set of independent validation rules. A single large conditional in the application would be shorter initially, but would become difficult to test and extend as record types grow.
+`ClassifierChain` holds one classifier per record type (`SensorClassifier`, `DeviceClassifier`, `AccessClassifier`), each behind the `RecordClassifier` interface. The chain tries them in registration order and returns the first matching `RecordType`; a line that matches none returns `null` and is skipped. This fits because classification is an ordered set of independent validation rules, and each rule can be tested on its own. A single large conditional would be shorter at first but harder to test and extend as record types grow.
+
+This is a first-match chain rather than a linked-handler chain: the classifiers do not hold successor references. That simpler form is sufficient because each classifier only recognizes its own record type.
 
 ### Strategy
 
-The output boundary is isolated in `JsonOutputWriter`. A future `CsvOutputWriter` can implement the same output contract and be selected by the command-line composition code without changing parsers or aggregators. This is preferable to putting JSON and CSV branches into every aggregator, though it adds a small abstraction and one more class per format.
+The output boundary is `OutputWriter`, with `JsonOutputWriter` as the current implementation. A future `CsvOutputWriter` can implement the same interface and be selected in `App`. This keeps format-specific code out of the aggregators and parser. The trade-off is a small abstraction and one more class per format.
 
 ### Factory
 
-`ClassifierChainFactory` and `AggregatorFactory` create the configured classifier chain and the appropriate aggregator for each `RecordType`. Factories keep object-construction decisions out of the processing loop. The trade-off is extra indirection, but tests and future configuration changes do not need to know the concrete class graph.
+`ClassifierChainFactory` builds the ordered classifier chain, and `AggregatorFactory` creates the aggregator for each `RecordType`. Both are Simple Factories. Factories keep construction decisions out of the processing loop, so `App` does not construct concrete classifiers or aggregators directly. The trade-off is a small amount of indirection.
 
 ## Consequences
 
-The patterns create more small classes than a procedural implementation, but each class has one reason to change. This improves unit testing, makes malformed-input behavior local, and supports extension. The main cost is indirection: a new contributor must follow the chain and factories before seeing the complete flow. The implementation also deliberately uses a small dependency-free JSON serializer, which reduces setup but means a future complex JSON requirement should be handled by replacing that serializer with a well-tested library.
+The patterns create more small classes than a procedural implementation, but each class has one reason to change. This improves unit testing, keeps malformed-input behavior local, and supports extension. The main costs are:
+
+- **Indirection:** a contributor follows `App` to the chain and factories before seeing the complete flow.
+- **Class count:** there is one classifier and aggregator per record type, plus factories and an output implementation.
+- **Strategy overhead:** an output interface for one current implementation adds a small abstraction.
+
+The implementation uses a small dependency-free JSON serializer. This reduces setup and honors the core-logic constraint, but a future complex JSON requirement should be handled by replacing that serializer with a well-tested JSON library.
 
 ## Extensibility
 
-- **Network Logs:** add a `NetworkClassifier`, `NetworkAggregator`, and `Network` record type; register the classifier in `ClassifierChainFactory`, register the aggregator in `AggregatorFactory`, and add one output file mapping. Existing parser and aggregators remain unchanged.
-- **JSON Lines input:** add a `RecordParser` interface, move the current logic into `KeyValueParser`, and add `JsonLineParser`. Select the parser at the composition boundary based on an input-format option. Classification and aggregation remain unchanged because both parsers return `ParsedLine`.
-- **CSV output:** add a `CsvOutputWriter` implementing the output-writer contract and choose it at the output boundary. Existing JSON serialization and aggregation logic remain unchanged.
+- **Network Logs:** add `NETWORK` to `RecordType`, add and register `NetworkClassifier`, add `NetworkAggregator` and its factory case, and extend the output mapping. Existing parser and aggregators remain unchanged.
+- **JSON Lines input:** add a parser interface, implement `JsonLineParser`, and select the parser at the composition boundary. Classification and aggregation remain unchanged because both parsers return `ParsedLine`.
+- **CSV output:** add `CsvOutputWriter` implementing `OutputWriter` and select it in `App`. JSON serialization, classification, and aggregation remain unchanged.
+
+## Input and output rules implemented
+
+- Every valid input line begins with a `ts` field. The timestamp is ignored during aggregation.
+- Blank lines, missing `=`, empty keys or values such as `sensor=`, unclosed quotes, and duplicate keys are skipped.
+- Lines with missing or invalid classification fields are skipped silently.
+- Decimal results are rounded to one decimal place. Whole-number results are written without a decimal point.
+- Percentiles use the nearest-rank method; the sensor median averages the two middle values for an even count.
