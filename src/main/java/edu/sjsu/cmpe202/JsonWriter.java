@@ -12,5 +12,28 @@ public final class JsonWriter {
         else if (v instanceof String s) b.append('"').append(escape(s)).append('"'); else b.append(v);
     }
     private static void indent(StringBuilder b,int n){ b.append("  ".repeat(n)); }
-    private static String escape(String s){ return s.replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n").replace("\r","\\r").replace("\t","\\t"); }
+    private static String escape(String s) {
+    StringBuilder escaped = new StringBuilder();
+
+    for (char c : s.toCharArray()) {
+        switch (c) {
+            case '\\' -> escaped.append("\\\\");
+            case '"' -> escaped.append("\\\"");
+            case '\n' -> escaped.append("\\n");
+            case '\r' -> escaped.append("\\r");
+            case '\t' -> escaped.append("\\t");
+            case '\b' -> escaped.append("\\b");
+            case '\f' -> escaped.append("\\f");
+            default -> {
+                if (c < 0x20) {
+                    escaped.append(String.format("\\u%04x", (int) c));
+                } else {
+                    escaped.append(c);
+                }
+            }
+        }
+    }
+
+    return escaped.toString();
+}
 }

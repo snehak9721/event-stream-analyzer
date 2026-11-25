@@ -14,7 +14,7 @@ The application creates all three output files. Malformed records are skipped si
 
 ## Input rules
 
-Each valid line begins with a `ts` field and contains whitespace-separated `key=value` pairs. Quoted values may contain spaces. Blank lines, missing `=`, empty keys or values, unclosed quotes, duplicate keys, and records with invalid classification fields are skipped.
+Each valid line begins with a `ts` field and contains whitespace-separated `key=value` pairs. Quoted values may contain spaces. Blank lines and malformed lines, including missing `=`, empty keys or values, unclosed quotes, duplicate keys, non-whitespace characters immediately following a closing quote, and invalid classification fields are skipped.
 
 ## Aggregation rules
 

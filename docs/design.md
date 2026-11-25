@@ -6,7 +6,7 @@ The application reads one event record per line from a plain-text IoT or smart-b
 
 ## Pattern selection
 
-### Chain of Responsibility
+### Chain of Responsibility - Ordered First-Match Chain
 
 `ClassifierChain` holds one classifier per record type (`SensorClassifier`, `DeviceClassifier`, `AccessClassifier`), each behind the `RecordClassifier` interface. The chain tries them in registration order and returns the first matching `RecordType`; a line that matches none returns `null` and is skipped. This fits because classification is an ordered set of independent validation rules, and each rule can be tested on its own. A single large conditional would be shorter at first but harder to test and extend as record types grow.
 
@@ -18,7 +18,7 @@ The output boundary is `OutputWriter`, with `JsonOutputWriter` as the current im
 
 ### Factory
 
-`ClassifierChainFactory` builds the ordered classifier chain, and `AggregatorFactory` creates the aggregator for each `RecordType`. Both are Simple Factories. Factories keep construction decisions out of the processing loop, so `App` does not construct concrete classifiers or aggregators directly. The trade-off is a small amount of indirection.
+`ClassifierChainFactory` builds the ordered classifier chain, and `AggregatorFactory` creates the aggregator for each `RecordType`. Both are Simple Factories. `App` uses these factories instead of constructing concrete classifiers or aggregators directly. `App` remains the composition root and directly creates the parser and JSON output writer. This keeps construction decisions centralized while preserving a simple application flow. The trade-off is a small amount of indirection.
 
 ## Consequences
 
@@ -32,14 +32,20 @@ The implementation uses a small dependency-free JSON serializer. This reduces se
 
 ## Extensibility
 
-- **Network Logs:** add `NETWORK` to `RecordType`, add and register `NetworkClassifier`, add `NetworkAggregator` and its factory case, and extend the output mapping. Existing parser and aggregators remain unchanged.
-- **JSON Lines input:** add a parser interface, implement `JsonLineParser`, and select the parser at the composition boundary. Classification and aggregation remain unchanged because both parsers return `ParsedLine`.
-- **CSV output:** add `CsvOutputWriter` implementing `OutputWriter` and select it in `App`. JSON serialization, classification, and aggregation remain unchanged.
+The following changes require updates only at registration or composition points. Existing parser, classifier, aggregator, and serializer logic remains unchanged unless explicitly listed.
+
+| Hypothetical change | New classes | Existing classes or files to modify |
+|---|---|---|
+| Network Logs | `NetworkClassifier`, `NetworkAggregator` | Add `NETWORK` to `RecordType`; register the classifier in `ClassifierChainFactory`; add a case in `AggregatorFactory`; extend the output mapping in `App`, `OutputWriter`, and `JsonOutputWriter` |
+| JSON Lines input | `LineParser`, `JsonLineParser` | Make `KeyValueParser` implement `LineParser`; select the parser in `App` |
+| CSV output | `CsvOutputWriter` | Select the writer in `App`; `CsvOutputWriter` implements the existing `OutputWriter` interface |
+
+Both key/value and JSON Lines parsers return `ParsedLine`, so classification and aggregation do not need to change. Both JSON and CSV writers receive completed aggregation results, so the aggregators do not need to change when a new output format is added.
 
 ## Input and output rules implemented
 
 - Every valid input line begins with a `ts` field. The timestamp is ignored during aggregation.
-- Blank lines, missing `=`, empty keys or values such as `sensor=`, unclosed quotes, and duplicate keys are skipped.
+- Blank lines, missing `=`, empty keys or values such as `sensor=`, unclosed quotes, duplicate keys, and non-whitespace characters immediately following a closing quote are skipped.
 - Lines with missing or invalid classification fields are skipped silently.
 - Decimal results are rounded to one decimal place. Whole-number results are written without a decimal point.
 - Percentiles use the nearest-rank method; the sensor median averages the two middle values for an even count.

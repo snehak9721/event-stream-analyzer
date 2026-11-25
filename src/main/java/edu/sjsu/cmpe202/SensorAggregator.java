@@ -1,5 +1,7 @@
 package edu.sjsu.cmpe202;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 public final class SensorAggregator implements Aggregator {
@@ -20,8 +22,18 @@ public final class SensorAggregator implements Aggregator {
     }
     private static double median(List<Double> v) { int n = v.size(), mid = n / 2; return n % 2 == 1 ? v.get(mid) : (v.get(mid - 1) + v.get(mid)) / 2.0; }
     static Number rounded(double value) {
-        double r = Math.round(value * 10.0) / 10.0;
-        if (r == Math.rint(r)) return Long.valueOf((long) r);
-        return Double.valueOf(r);
+    BigDecimal rounded = BigDecimal.valueOf(value)
+            .setScale(1, RoundingMode.HALF_UP);
+
+    BigDecimal minLong = BigDecimal.valueOf(Long.MIN_VALUE);
+    BigDecimal maxLong = BigDecimal.valueOf(Long.MAX_VALUE);
+
+    if (rounded.stripTrailingZeros().scale() <= 0
+            && rounded.compareTo(minLong) >= 0
+            && rounded.compareTo(maxLong) <= 0) {
+        return rounded.longValueExact();
     }
+
+    return rounded.doubleValue();
+}
 }
